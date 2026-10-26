@@ -1,0 +1,916 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Find and remove watermarks from PDFs. Files stay in your browser.">
+<title>Unstamp PDF</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a press-proof bench. Findings rail on the left, proof sheets (before with removed areas marked, after) on the right. */
+:root {
+  --bg: #eef1f4;
+  --sheet: #ffffff;
+  --ink: #18202b;
+  --muted: #5d6877;
+  --line: #d3d9e1;
+  --accent: #2346c9;
+  --accent-ink: #ffffff;
+  --mark: #d1257a;
+  --mark-soft: rgba(209, 37, 122, 0.12);
+  --well: #e3e8ee;
+  --ok: #1d7a4c;
+  --warn: #9a5b00;
+  --display: "Familjen Grotesk", "Segoe UI", system-ui, sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #12161c; --sheet: #1b2129; --ink: #e6ebf1; --muted: #98a3b2; --line: #2e3742;
+  --accent: #7d97ff; --accent-ink: #0d1220; --mark: #ff5fa8; --mark-soft: rgba(255, 95, 168, 0.14);
+  --well: #0d1116; --ok: #5fcf95; --warn: #e8a64a; color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #12161c; --sheet: #1b2129; --ink: #e6ebf1; --muted: #98a3b2; --line: #2e3742;
+  --accent: #7d97ff; --accent-ink: #0d1220; --mark: #ff5fa8; --mark-soft: rgba(255, 95, 168, 0.14);
+  --well: #0d1116; --ok: #5fcf95; --warn: #e8a64a; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+img { max-width: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; display: grid; gap: 18px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; justify-content: space-between; }
+.brand { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; min-width: 0; }
+h1 { font-family: var(--display); font-weight: 700; font-size: 28px; letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+h1 .strike { position: relative; color: var(--muted); }
+h1 .strike::after { content: ""; position: absolute; left: -2px; right: -2px; top: 54%; height: 3px; background: var(--mark); transform: rotate(-8deg); border-radius: 2px; }
+.tag { color: var(--muted); font-size: 14px; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+button, .btn { font: 500 14px/1 var(--body); border-radius: 8px; padding: 11px 16px; cursor: pointer; border: 1px solid var(--line); background: var(--sheet); color: var(--ink); display: inline-flex; align-items: center; gap: 8px; }
+button:hover, .btn:hover { border-color: var(--muted); }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+button.primary:hover { filter: brightness(1.08); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:focus-visible, .btn:focus-within, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.filebar { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding-block: 10px; }
+.filebar b { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+.pill { font: 500 12px/1 var(--mono); padding: 5px 8px; border-radius: 99px; background: var(--well); color: var(--muted); letter-spacing: 0.02em; }
+.pill.example { background: var(--mark-soft); color: var(--mark); }
+.main { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 22px; align-items: start; }
+@media (max-width: 860px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.rail { display: grid; gap: 16px; min-width: 0; }
+.label { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); margin: 0 0 8px; }
+.list { display: grid; gap: 8px; }
+.item { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 12px; padding: 12px 14px; background: var(--sheet); border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.item:has(input:checked) { border-color: var(--mark); box-shadow: inset 3px 0 0 var(--mark); }
+.item input { margin: 3px 0 0; width: 17px; height: 17px; accent-color: var(--mark); grid-row: span 2; }
+.item .t { font-weight: 600; overflow-wrap: anywhere; }
+.item .d { font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 10px; }
+.item .d .pg { font-family: var(--mono); font-size: 12px; }
+details > summary { cursor: pointer; font-size: 14px; color: var(--muted); padding-block: 6px; }
+details[open] > summary { margin-bottom: 8px; }
+.empty { font-size: 14px; color: var(--muted); padding: 12px 14px; border: 1px dashed var(--line); border-radius: 10px; }
+.search { display: flex; gap: 8px; }
+.search input { flex: 1; min-width: 0; font: 15px var(--body); padding: 10px 12px; border-radius: 8px; border: 1px solid var(--line); background: var(--sheet); color: var(--ink); }
+.hint { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+.msg { font-size: 14px; padding: 10px 12px; border-radius: 8px; background: var(--well); }
+.msg.err { color: var(--mark); background: var(--mark-soft); }
+.msg.ok { color: var(--ok); }
+.proof { display: grid; gap: 12px; min-width: 0; }
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.pager .num { font: 500 14px var(--mono); font-variant-numeric: tabular-nums; }
+.pager .nav { display: flex; gap: 6px; align-items: center; }
+.pager button { padding: 8px 12px; }
+.legend { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.legend i { width: 14px; height: 14px; border-radius: 3px; background: var(--mark); opacity: 0.55; display: inline-block; }
+.sheets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 560px) { .sheets { grid-template-columns: minmax(0, 1fr); } }
+figure { margin: 0; display: grid; gap: 6px; min-width: 0; }
+figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-spacing: 0.09em; color: var(--muted); }
+.paper { background: var(--well); border-radius: 6px; padding: 10px; display: grid; place-items: center; min-height: 240px; position: relative; }
+.paper canvas { max-width: 100%; height: auto; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 6px 18px rgba(0,0,0,.08); }
+.busy { position: absolute; inset: 0; display: grid; place-items: center; font-size: 13px; color: var(--muted); }
+.drop { position: fixed; inset: 0; background: color-mix(in srgb, var(--accent) 18%, transparent); border: 3px dashed var(--accent); display: grid; place-items: center; font: 700 24px var(--display); color: var(--accent); z-index: 20; pointer-events: none; }
+.note { font-size: 13px; color: var(--muted); max-width: 70ch; }
+@media (prefers-reduced-motion: no-preference) { .item { transition: border-color .15s, box-shadow .15s; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <h1>Un<span class="strike">stamp</span> PDF</h1>
+      <span class="tag">Finds watermarks in a PDF and saves a clean copy. Files stay in your browser.</span>
+    </div>
+    <div class="actions">
+      <label class="btn" for="file">Open a PDF<input type="file" id="file" accept="application/pdf,.pdf"></label>
+      <button class="primary" id="save" disabled>Save cleaned PDF</button>
+    </div>
+  </header>
+
+  <div class="filebar" id="filebar"><span>Loading…</span></div>
+
+  <div class="main">
+    <aside class="rail">
+      <section>
+        <p class="label">Likely watermarks</p>
+        <div class="list" id="likely"></div>
+      </section>
+      <details id="moreBox" hidden>
+        <summary id="moreSum">Other repeating content</summary>
+        <div class="list" id="more"></div>
+      </details>
+      <section>
+        <p class="label">Remove by text</p>
+        <form class="search" id="searchForm">
+          <input id="phrase" type="text" placeholder="e.g. Do not copy" autocomplete="off">
+          <button type="submit">Find</button>
+        </form>
+        <p class="hint">Use this when the watermark is ordinary text the list didn't catch.</p>
+      </section>
+      <div id="status" class="msg" hidden></div>
+    </aside>
+
+    <section class="proof">
+      <div class="pager">
+        <div class="nav">
+          <button id="prev" aria-label="Previous page">←</button>
+          <span class="num" id="pageNum">Page – of –</span>
+          <button id="next" aria-label="Next page">→</button>
+        </div>
+        <span class="legend"><i></i> Marked areas will be removed</span>
+      </div>
+      <div class="sheets">
+        <figure><figcaption>Before</figcaption><div class="paper"><canvas id="cvBefore" width="10" height="10"></canvas><div class="busy" id="busyB" hidden>Rendering…</div></div></figure>
+        <figure><figcaption>After</figcaption><div class="paper"><canvas id="cvAfter" width="10" height="10"></canvas><div class="busy" id="busyA" hidden>Rendering…</div></div></figure>
+      </div>
+      <p class="note">Works on watermarks stored as separate text, images, stamps or watermark layers. If the watermark is baked into a scanned page image, it is part of the picture and can't be lifted out this way. Password-protected PDFs need the password removed first.</p>
+    </section>
+  </div>
+</div>
+<div class="drop" id="drop" hidden>Drop the PDF to open it</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script>
+/* Watermark engine: finds watermark-like content in a PDF and rebuilds it without the chosen items.
+   Needs pdf-lib (passed in as L). Works in the browser and in Node. */
+(function (root, factory) {
+  if (typeof module === 'object' && module.exports) module.exports = factory;
+  else root.WMEngine = factory;
+})(typeof self !== 'undefined' ? self : this, function (L) {
+  const { PDFDocument, PDFName, PDFArray, PDFDict, PDFRef, PDFRawStream, PDFNumber, PDFString, PDFHexString, decodePDFRawStream } = L;
+
+  /* ---------- bytes <-> latin1 ---------- */
+  function toLatin1(u8) {
+    let out = '';
+    for (let i = 0; i < u8.length; i += 0x8000) out += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return out;
+  }
+  function fromLatin1(s) {
+    const u8 = new Uint8Array(s.length);
+    for (let i = 0; i < s.length; i++) u8[i] = s.charCodeAt(i) & 0xff;
+    return u8;
+  }
+  function hash(s) { // FNV-1a, enough to group identical content
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return (h >>> 0).toString(36) + ':' + s.length;
+  }
+
+  /* ---------- content-stream tokenizer ---------- */
+  const isWs = c => c === ' ' || c === '\n' || c === '\r' || c === '\t' || c === '\f' || c === '\0';
+  const isDelim = c => c === '(' || c === ')' || c === '<' || c === '>' || c === '[' || c === ']' || c === '{' || c === '}' || c === '/' || c === '%';
+
+  function skipLiteral(s, i) { // s[i] === '('
+    let depth = 0;
+    for (; i < s.length; i++) {
+      const c = s[i];
+      if (c === '\\') { i++; continue; }
+      if (c === '(') depth++;
+      else if (c === ')') { depth--; if (depth === 0) return i + 1; }
+    }
+    return s.length;
+  }
+  function skipNested(s, i) { // at '[' or '<<'; returns index after the matching close
+    let depth = 0;
+    while (i < s.length) {
+      const c = s[i];
+      if (c === '(') { i = skipLiteral(s, i); continue; }
+      if (c === '<' && s[i + 1] === '<') { depth++; i += 2; continue; }
+      if (c === '>' && s[i + 1] === '>') { depth--; i += 2; if (depth === 0) return i; continue; }
+      if (c === '<') { const j = s.indexOf('>', i); i = j < 0 ? s.length : j + 1; continue; }
+      if (c === '[') { depth++; i++; continue; }
+      if (c === ']') { depth--; i++; if (depth === 0) return i; continue; }
+      if (c === '%') { while (i < s.length && s[i] !== '\n' && s[i] !== '\r') i++; continue; }
+      i++;
+    }
+    return s.length;
+  }
+
+  function tokenize(s) {
+    const ops = [];
+    let operands = [], opStart = -1, i = 0;
+    const n = s.length;
+    while (i < n) {
+      const c = s[i];
+      if (isWs(c)) { i++; continue; }
+      if (c === '%') { while (i < n && s[i] !== '\n' && s[i] !== '\r') i++; continue; }
+      const start = i;
+      if (opStart < 0) opStart = start;
+      if (c === '(') { i = skipLiteral(s, i); operands.push({ t: 'str', raw: s.slice(start, i) }); continue; }
+      if (c === '<') {
+        if (s[i + 1] === '<') { i = skipNested(s, i); operands.push({ t: 'dict', raw: s.slice(start, i) }); }
+        else { const j = s.indexOf('>', i); i = j < 0 ? n : j + 1; operands.push({ t: 'hex', raw: s.slice(start, i) }); }
+        continue;
+      }
+      if (c === '[') { i = skipNested(s, i); operands.push({ t: 'arr', raw: s.slice(start, i) }); continue; }
+      if (c === '/') { i++; while (i < n && !isWs(s[i]) && !isDelim(s[i])) i++; operands.push({ t: 'name', v: s.slice(start + 1, i) }); continue; }
+      if (c === ')' || c === '>' || c === ']' || c === '{' || c === '}') { i++; continue; }
+      while (i < n && !isWs(s[i]) && !isDelim(s[i])) i++;
+      const tok = s.slice(start, i);
+      if (/^[+-]?(\d+\.?\d*|\.\d+)$/.test(tok)) { operands.push({ t: 'num', v: parseFloat(tok) }); continue; }
+      if (tok === 'true' || tok === 'false' || tok === 'null') { operands.push({ t: 'kw', v: tok }); continue; }
+      if (tok === 'BI') { // inline image: skip to EI
+        const re = /\sID[\s]/g; re.lastIndex = i;
+        const m = re.exec(s);
+        let end = n;
+        if (m) {
+          const ei = /\sEI(?=[\s]|$)/g; ei.lastIndex = m.index + m[0].length;
+          const m2 = ei.exec(s);
+          if (m2) end = m2.index + m2[0].length;
+        }
+        i = end;
+        ops.push({ op: 'BI', operands: [], start: opStart, end: i });
+        operands = []; opStart = -1; continue;
+      }
+      ops.push({ op: tok, operands, start: opStart, end: i });
+      operands = []; opStart = -1;
+    }
+    return ops;
+  }
+
+  /* ---------- string operand -> readable text ---------- */
+  function strBytes(tok) {
+    if (tok.t === 'hex') {
+      const h = tok.raw.slice(1, -1).replace(/[^0-9a-fA-F]/g, '');
+      const out = [];
+      for (let i = 0; i < h.length; i += 2) out.push(parseInt((h[i] + (h[i + 1] || '0')), 16));
+      return out;
+    }
+    const s = tok.raw.slice(1, -1), out = [];
+    for (let i = 0; i < s.length; i++) {
+      let c = s[i];
+      if (c !== '\\') { out.push(c.charCodeAt(0) & 0xff); continue; }
+      c = s[++i];
+      if (c === undefined) break;
+      if (c === 'n') out.push(10); else if (c === 'r') out.push(13); else if (c === 't') out.push(9);
+      else if (c === 'b') out.push(8); else if (c === 'f') out.push(12);
+      else if (c === '\r') { if (s[i + 1] === '\n') i++; }
+      else if (c === '\n') { /* line continuation */ }
+      else if (c >= '0' && c <= '7') {
+        let o = c; while (o.length < 3 && s[i + 1] >= '0' && s[i + 1] <= '7') o += s[++i];
+        out.push(parseInt(o, 8) & 0xff);
+      } else out.push(c.charCodeAt(0) & 0xff);
+    }
+    return out;
+  }
+  function bytesToText(b) {
+    if (!b.length) return '';
+    let zeroEven = 0;
+    for (let i = 0; i < b.length; i += 2) if (b[i] === 0) zeroEven++;
+    let txt = '';
+    if (b.length >= 2 && b.length % 2 === 0 && zeroEven >= b.length / 4) {
+      for (let i = 0; i < b.length; i += 2) txt += String.fromCharCode((b[i] << 8) | b[i + 1]);
+    } else txt = String.fromCharCode.apply(null, b);
+    return txt;
+  }
+  function readable(t) {
+    const clean = t.replace(/[\x00-\x1f\x7f-\x9f\ufffd]/g, '');
+    if (!clean.trim()) return '';
+    const good = (clean.match(/[\p{L}\p{N}\p{P}\p{Zs}]/gu) || []).length;
+    return good / clean.length >= 0.85 ? clean.replace(/\s+/g, ' ').trim() : '';
+  }
+  function opsText(ops, a, b) {
+    let t = '';
+    for (let k = a; k <= b; k++) {
+      const o = ops[k];
+      if (o.op === 'Tj' || o.op === "'" || o.op === '"') {
+        const st = o.operands[o.operands.length - 1];
+        if (st && (st.t === 'str' || st.t === 'hex')) t += bytesToText(strBytes(st));
+      } else if (o.op === 'TJ') {
+        const arr = o.operands[0];
+        if (arr && arr.t === 'arr') {
+          const inner = tokenize(arr.raw.slice(1, -1) + ' X');
+          for (const tk of inner[0] ? inner[0].operands : []) {
+            if (tk.t === 'str' || tk.t === 'hex') t += bytesToText(strBytes(tk));
+            else if (tk.t === 'num' && tk.v < -200) t += ' ';
+          }
+        }
+      } else if (o.op === 'Td' || o.op === 'TD' || o.op === 'T*' || o.op === 'Tm') { if (t && !t.endsWith(' ')) t += ' '; }
+    }
+    return t;
+  }
+
+  /* ---------- pdf object helpers ---------- */
+  function lookup(ctx, o) { return o instanceof PDFRef ? ctx.lookup(o) : o; }
+  function dictGet(ctx, d, key) { if (!d || !(d instanceof PDFDict || d.dict)) return undefined; const dd = d instanceof PDFDict ? d : d.dict; return lookup(ctx, dd.get(PDFName.of(key))); }
+  function num(o) { return o instanceof PDFNumber ? o.asNumber() : undefined; }
+  function txt(o) { try { if (o instanceof PDFString || o instanceof PDFHexString) return o.decodeText(); } catch (e) {} return o ? String(o) : ''; }
+  function deepString(ctx, o, depth = 0, seen = new Set()) {
+    o = lookup(ctx, o);
+    if (!o || depth > 4 || seen.has(o)) return '';
+    seen.add(o);
+    if (o instanceof PDFDict) {
+      let s = '';
+      for (const [k, v] of o.entries()) s += ' ' + k.toString() + ' ' + deepString(ctx, v, depth + 1, seen);
+      return s;
+    }
+    if (o instanceof PDFArray) return o.asArray().map(v => deepString(ctx, v, depth + 1, seen)).join(' ');
+    if (o instanceof PDFString || o instanceof PDFHexString) return txt(o);
+    if (o.dict) return deepString(ctx, o.dict, depth + 1, seen);
+    return o.toString();
+  }
+  function streamBytes(stream) {
+    if (stream instanceof PDFRawStream) {
+      const f = stream.dict.get(PDFName.of('Filter'));
+      if (!f) return stream.contents;
+      return decodePDFRawStream(stream).decode();
+    }
+    if (typeof stream.getUnencodedContents === 'function') return stream.getUnencodedContents();
+    if (typeof stream.getContents === 'function') return stream.getContents();
+    throw new Error('Unknown stream type');
+  }
+  function isWatermarkOCG(ctx, ocg) {
+    ocg = lookup(ctx, ocg);
+    if (!ocg) return false;
+    // OCMD: check its OCGs
+    const ocgs = dictGet(ctx, ocg, 'OCGs');
+    if (ocgs) {
+      const arr = ocgs instanceof PDFArray ? ocgs.asArray() : [ocgs];
+      return arr.some(x => isWatermarkOCG(ctx, x));
+    }
+    const name = txt(dictGet(ctx, ocg, 'Name'));
+    if (/water\s*mark/i.test(name)) return true;
+    const usage = deepString(ctx, dictGet(ctx, ocg, 'Usage'));
+    return /\/Watermark|\/PageElement[\s\S]*\/W\b/.test(usage);
+  }
+
+  /* ---------- analysis ---------- */
+  const PAINT_TEXT = new Set(['Tj', 'TJ', "'", '"']);
+  const PAINT = new Set(['S', 's', 'f', 'F', 'f*', 'B', 'B*', 'b', 'b*', 'sh', 'Do', 'BI', 'Tj', 'TJ', "'", '"']);
+  const KEEP_STATE = new Set(['q', 'Q', 'cm', 'w', 'J', 'j', 'M', 'd', 'ri', 'i', 'gs', 'CS', 'cs', 'SC', 'SCN', 'sc', 'scn', 'G', 'g', 'RG', 'rg', 'K', 'k', 'Tc', 'Tw', 'Tz', 'TL', 'Tf', 'Tr', 'Ts']);
+
+  function readPage(doc, page, index) {
+    const ctx = doc.context;
+    const node = page.node;
+    const res = node.Resources();
+    const contents = node.Contents();
+    const info = { index, editable: true, s: '', ops: [], res, error: null };
+    if (!contents) return info;
+    try {
+      const list = contents instanceof PDFArray ? contents.asArray().map(r => ctx.lookup(r)) : [contents];
+      const parts = list.filter(Boolean).map(st => toLatin1(streamBytes(st)));
+      info.s = parts.join('\n');
+      info.ops = tokenize(info.s);
+    } catch (e) { info.editable = false; info.error = String(e && e.message || e); }
+    return info;
+  }
+
+  function analyzePage(doc, info, xobjCache) {
+    const ctx = doc.context;
+    const res = info.res;
+    const ops = info.ops;
+    const xobjs = dictGet(ctx, res, 'XObject');
+    const props = dictGet(ctx, res, 'Properties');
+    const gstates = dictGet(ctx, res, 'ExtGState');
+    const found = { mc: [], text: [], xo: [], groups: [] };
+    const stack = [{ rot: false, alpha: false, scale: 1, fs: 0 }];
+    const qStack = [];
+    const mcStack = [];
+    let bt = null;
+    for (let k = 0; k < ops.length; k++) {
+      const o = ops[k];
+      const cur = stack[stack.length - 1];
+      switch (o.op) {
+        case 'q': stack.push({ ...cur }); qStack.push({ k, hasText: false, hasDo: false, hasPaint: false }); break;
+        case 'Q': {
+          if (stack.length > 1) stack.pop();
+          const g = qStack.pop();
+          if (g) {
+            const parent = qStack[qStack.length - 1];
+            if (parent) { parent.hasText ||= g.hasText; parent.hasDo ||= g.hasDo; parent.hasPaint ||= g.hasPaint; }
+            if (!g.hasText && !g.hasDo && g.hasPaint) {
+              const start = ops[g.k].start, end = o.end;
+              found.groups.push({ start, end, raw: info.s.slice(start, end), rot: cur.rot, alpha: cur.alpha });
+            }
+          }
+          break;
+        }
+        case 'cm': {
+          const v = o.operands.map(x => x.v);
+          if (Math.abs(v[1] || 0) > 0.01 || Math.abs(v[2] || 0) > 0.01) cur.rot = true;
+          const sc = Math.sqrt((v[0] || 0) ** 2 + (v[1] || 0) ** 2);
+          if (sc) cur.scale *= sc;
+          break;
+        }
+        case 'gs': {
+          const nm = o.operands[0] && o.operands[0].v;
+          const gsd = nm && dictGet(ctx, gstates, nm);
+          const ca = num(dictGet(ctx, gsd, 'ca')), CA = num(dictGet(ctx, gsd, 'CA'));
+          if ((ca !== undefined && ca < 0.95) || (CA !== undefined && CA < 0.95)) cur.alpha = true;
+          break;
+        }
+        case 'BT': bt = { k, rot: false, tmScale: 1 }; break;
+        case 'Tf': cur.fs = Math.abs((o.operands[1] && o.operands[1].v) || 0); break;
+        case 'Tm': if (bt) {
+          const v = o.operands.map(x => x.v);
+          if (Math.abs(v[1] || 0) > 0.01 || Math.abs(v[2] || 0) > 0.01) bt.rot = true;
+          bt.tmScale = Math.sqrt((v[0] || 0) ** 2 + (v[1] || 0) ** 2) || 1;
+        } break;
+        case 'ET': if (bt) {
+          const start = ops[bt.k].start, end = o.end;
+          const label = readable(opsText(ops, bt.k, k));
+          const hasPaint = ops.slice(bt.k, k).some(x => PAINT_TEXT.has(x.op));
+          if (hasPaint) {
+            found.text.push({
+              start, end, raw: info.s.slice(start, end).replace(/\s+/g, ' '), label,
+              rot: bt.rot || cur.rot, alpha: cur.alpha, big: cur.fs * bt.tmScale * cur.scale >= 36,
+            });
+            for (const g of qStack) g.hasText = true;
+          }
+          bt = null;
+        } break;
+        case 'BDC': case 'BMC': {
+          let wm = false;
+          const tag = o.operands[0] && o.operands[0].v;
+          const p = o.operands[1];
+          if (o.op === 'BDC' && p) {
+            if (p.t === 'dict') wm = /\/Watermark\b/.test(p.raw) || (tag === 'Artifact' && /\/Subtype\s*\/Watermark/.test(p.raw));
+            else if (p.t === 'name') {
+              const pd = dictGet(ctx, props, p.v);
+              if (tag === 'OC') wm = isWatermarkOCG(ctx, pd);
+              else if (pd) wm = /\/Watermark\b/.test(deepString(ctx, pd));
+            }
+          }
+          mcStack.push({ k, wm });
+          break;
+        }
+        case 'EMC': {
+          const m = mcStack.pop();
+          if (m && m.wm && !mcStack.some(x => x.wm)) found.mc.push({ start: ops[m.k].start, end: o.end });
+          break;
+        }
+        case 'Do': {
+          for (const g of qStack) g.hasDo = true;
+          const nm = o.operands[0] && o.operands[0].v;
+          const ref = xobjs && xobjs.get(PDFName.of(nm || ''));
+          const xo = ref && lookup(ctx, ref);
+          if (!xo) break;
+          const meta = describeXObject(doc, xo, xobjCache);
+          found.xo.push({ start: o.start, end: o.end, name: nm, meta, rot: cur.rot, alpha: cur.alpha });
+          break;
+        }
+        default:
+          if (PAINT.has(o.op)) for (const g of qStack) g.hasPaint = true;
+      }
+    }
+    return found;
+  }
+
+  function describeXObject(doc, xo, cache) {
+    if (cache.has(xo)) return cache.get(xo);
+    const ctx = doc.context;
+    const d = xo.dict;
+    const sub = String(d.get(PDFName.of('Subtype')) || '');
+    const meta = { kind: sub === '/Image' ? 'image' : 'form', key: '', wm: false, label: '', w: 0, h: 0 };
+    try {
+      const body = xo instanceof PDFRawStream ? toLatin1(xo.contents) : '';
+      meta.key = hash(sub + '|' + body);
+    } catch (e) { meta.key = String(Math.random()); }
+    const oc = d.get(PDFName.of('OC'));
+    if (oc && isWatermarkOCG(ctx, oc)) meta.wm = true;
+    const piece = d.get(PDFName.of('PieceInfo'));
+    if (piece && /Watermark/i.test(deepString(ctx, piece))) meta.wm = true;
+    if (meta.kind === 'image') {
+      meta.w = num(dictGet(ctx, d, 'Width')) || 0; meta.h = num(dictGet(ctx, d, 'Height')) || 0;
+    } else {
+      try {
+        const s = toLatin1(streamBytes(xo));
+        const fops = tokenize(s);
+        meta.label = readable(opsText(fops, 0, fops.length - 1)).slice(0, 120);
+        if (/\/Artifact\s*<<[^>]*\/Watermark/.test(s)) meta.wm = true;
+      } catch (e) {}
+    }
+    cache.set(xo, meta);
+    return meta;
+  }
+
+  /* ---------- candidates ---------- */
+  function analyze(doc) {
+    const pages = doc.getPages();
+    const N = pages.length;
+    const ctx = doc.context;
+    const xobjCache = new Map();
+    const pageInfos = [], founds = [];
+    const cands = new Map();
+    const add = (id, base, pageIdx, span) => {
+      let c = cands.get(id);
+      if (!c) { c = { id, pages: new Set(), spans: new Map(), annots: new Map(), ...base }; cands.set(id, c); }
+      c.pages.add(pageIdx);
+      if (span) { if (!c.spans.has(pageIdx)) c.spans.set(pageIdx, []); c.spans.get(pageIdx).push(span); }
+      return c;
+    };
+    let unreadable = 0;
+    pages.forEach((page, p) => {
+      const info = readPage(doc, page, p);
+      pageInfos.push(info);
+      if (!info.editable) { unreadable++; founds.push(null); return; }
+      founds.push(analyzePage(doc, info, xobjCache));
+      // annotations
+      const annots = page.node.Annots();
+      if (annots) annots.asArray().forEach((a, ai) => {
+        const ad = lookup(ctx, a);
+        if (ad instanceof PDFDict && String(ad.get(PDFName.of('Subtype'))) === '/Watermark') {
+          const c = add('annot', { kind: 'annot', title: 'Watermark annotations', detail: 'Added as a watermark annotation', likely: true }, p);
+          if (!c.annots.has(p)) c.annots.set(p, []);
+          c.annots.get(p).push(ai);
+        }
+      });
+    });
+
+    const half = Math.max(2, Math.ceil(N * 0.5));
+    founds.forEach(f => {
+      if (!f || !f.mc.length) return;
+      const inside = it => f.mc.some(m => it.start >= m.start && it.end <= m.end);
+      f.text = f.text.filter(t => !inside(t));
+      f.xo = f.xo.filter(x => !inside(x));
+      f.groups = f.groups.filter(g => !inside(g));
+    });
+    // tagged watermark content
+    founds.forEach((f, p) => f && f.mc.forEach(m => add('mc', { kind: 'mc', title: 'Tagged watermark layer', detail: 'Content the PDF itself marks as a watermark', likely: true }, p, [m.start, m.end])));
+    // XObjects
+    const xoGroups = new Map();
+    founds.forEach((f, p) => f && f.xo.forEach(x => {
+      if (!xoGroups.has(x.meta.key)) xoGroups.set(x.meta.key, []);
+      xoGroups.get(x.meta.key).push({ p, x });
+    }));
+    for (const [key, list] of xoGroups) {
+      const meta = list[0].x.meta;
+      const pagesSet = new Set(list.map(l => l.p));
+      const anyRot = list.some(l => l.x.rot), anyAlpha = list.some(l => l.x.alpha);
+      if (meta.wm) { list.forEach(l => add('mc', { kind: 'mc', title: 'Tagged watermark layer', detail: 'Content the PDF itself marks as a watermark', likely: true }, l.p, [l.x.start, l.x.end])); continue; }
+      const repeated = pagesSet.size >= half;
+      if (!repeated && !anyRot && !anyAlpha) continue;
+      const what = meta.kind === 'image' ? 'Image' : 'Drawing';
+      const title = meta.label ? `${what} with text “${meta.label.slice(0, 60)}”` : (meta.kind === 'image' ? `Image (${meta.w}×${meta.h} px)` : 'Stamped drawing');
+      const flags = [anyRot && 'rotated', anyAlpha && 'see-through'].filter(Boolean);
+      list.forEach(l => add('xo:' + key, {
+        kind: 'xo', title, label: meta.label,
+        detail: [repeated ? 'Repeats across pages' : 'Appears once', ...flags].join(' · '),
+        likely: (anyAlpha || anyRot || /water\s*mark|confidential|draft|sample|copy|preview/i.test(meta.label)) && (repeated || N === 1),
+      }, l.p, [l.x.start, l.x.end]));
+    }
+    // text blocks
+    const tGroups = new Map();
+    founds.forEach((f, p) => f && f.text.forEach(t => {
+      const key = t.label.length >= 3 ? 'L:' + t.label.toLowerCase() : 'R:' + hash(t.raw);
+      if (!tGroups.has(key)) tGroups.set(key, []);
+      tGroups.get(key).push({ p, t });
+    }));
+    for (const [key, list] of tGroups) {
+      const pagesSet = new Set(list.map(l => l.p));
+      const rot = list.some(l => l.t.rot), alpha = list.some(l => l.t.alpha), big = list.some(l => l.t.big);
+      const repeated = pagesSet.size >= half;
+      const label = list[0].t.label;
+      const wordy = /water\s*mark|confidential|draft|sample|copy|preview|do not|unofficial|evaluation|trial/i.test(label);
+      if (!repeated && !rot && !alpha && !big) continue;
+      const flags = [rot && 'rotated', alpha && 'see-through', big && 'large'].filter(Boolean);
+      const likely = rot || alpha || (big && repeated) || (wordy && (repeated || big));
+      list.forEach(l => add('tx:' + hash(key), {
+        kind: 'text', title: label ? `Text “${label.slice(0, 70)}${label.length > 70 ? '…' : ''}”` : 'Text in an embedded font', label,
+        detail: [repeated ? 'Repeats across pages' : 'Appears once', ...flags].join(' · '), likely,
+      }, l.p, [l.t.start, l.t.end]));
+    }
+    // vector groups (outlines, logos drawn as paths)
+    const gGroups = new Map();
+    founds.forEach((f, p) => {
+      if (!f) return;
+      const len = pageInfos[p].s.length;
+      f.groups.filter(g => g.raw.length < len * 0.5).forEach(g => {
+        const key = hash(g.raw.replace(/\s+/g, ' '));
+        if (!gGroups.has(key)) gGroups.set(key, []);
+        gGroups.get(key).push({ p, g });
+      });
+    });
+    const gCands = [];
+    for (const [key, list] of gGroups) {
+      const pagesSet = new Set(list.map(l => l.p));
+      const rot = list.some(l => l.g.rot), alpha = list.some(l => l.g.alpha);
+      if (pagesSet.size < half && !(N === 1 && alpha)) continue;
+      if (list[0].g.raw.length < 60) continue; // trivial rules/lines
+      gCands.push({ key, list, rot, alpha, repeated: pagesSet.size >= half });
+    }
+    // keep only outermost repeated groups
+    for (const gc of gCands) {
+      const inner = gc.list.every(l => gCands.some(o => o !== gc && o.list.some(m => m.p === l.p && m.g.start <= l.g.start && m.g.end >= l.g.end && (m.g.end - m.g.start) > (l.g.end - l.g.start))));
+      if (inner) continue;
+      const flags = [gc.rot && 'rotated', gc.alpha && 'see-through'].filter(Boolean);
+      gc.list.forEach(l => add('gr:' + gc.key, {
+        kind: 'shape', title: 'Repeated shapes or outlined lettering',
+        detail: [gc.repeated ? 'Repeats across pages' : 'Appears once', ...flags].join(' · '), likely: gc.alpha && gc.repeated,
+      }, l.p, [l.g.start, l.g.end]));
+    }
+
+    const list = [...cands.values()].map(c => ({ ...c, pageCount: c.pages.size }));
+    const order = { annot: 0, mc: 1, text: 2, xo: 3, shape: 4 };
+    list.sort((a, b) => (b.likely - a.likely) || (b.pageCount - a.pageCount) || (order[a.kind] - order[b.kind]));
+    return { N, pageInfos, founds, candidates: list, unreadable };
+  }
+
+  /* text search: every text block or stamped drawing whose readable text contains the phrase */
+  function searchText(analysis, phrase) {
+    const q = phrase.trim().toLowerCase();
+    if (!q) return null;
+    const c = { id: 'search:' + q, kind: 'search', title: `Text matching “${phrase.trim()}”`, detail: 'From your search', likely: true, pages: new Set(), spans: new Map(), annots: new Map() };
+    analysis.founds.forEach((f, p) => {
+      if (!f) return;
+      const hits = [];
+      f.text.forEach(t => { if (t.label.toLowerCase().includes(q)) hits.push([t.start, t.end]); });
+      f.xo.forEach(x => { if (x.meta.label && x.meta.label.toLowerCase().includes(q)) hits.push([x.start, x.end]); });
+      if (hits.length) { c.pages.add(p); c.spans.set(p, hits); }
+    });
+    c.pageCount = c.pages.size;
+    return c.pageCount ? c : { ...c, pageCount: 0, empty: true };
+  }
+
+  /* ---------- rebuild ---------- */
+  function cleanString(info, spans) {
+    spans = spans.slice().sort((a, b) => a[0] - b[0]);
+    const merged = [];
+    for (const sp of spans) {
+      const last = merged[merged.length - 1];
+      if (last && sp[0] <= last[1]) last[1] = Math.max(last[1], sp[1]); else merged.push([sp[0], sp[1]]);
+    }
+    let out = '', pos = 0, k = 0;
+    const ops = info.ops;
+    for (const [a, b] of merged) {
+      out += info.s.slice(pos, a);
+      const kept = [];
+      while (k < ops.length && ops[k].start < a) k++;
+      while (k < ops.length && ops[k].end <= b) { if (KEEP_STATE.has(ops[k].op)) kept.push(info.s.slice(ops[k].start, ops[k].end)); k++; }
+      out += kept.length ? '\n' + kept.join('\n') + '\n' : '\n';
+      pos = b;
+    }
+    return out + info.s.slice(pos);
+  }
+
+  async function load(bytes) {
+    const doc = await PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
+    if (doc.isEncrypted) { const e = new Error('encrypted'); e.code = 'encrypted'; throw e; }
+    return doc;
+  }
+
+  async function clean(bytes, selected, searchPhrases) {
+    const doc = await load(bytes);
+    const a = analyze(doc);
+    const ids = new Set(selected);
+    const chosen = a.candidates.filter(c => ids.has(c.id));
+    for (const ph of searchPhrases || []) { const s = searchText(a, ph); if (s && !s.empty && ids.has(s.id)) chosen.push(s); }
+    const ctx = doc.context;
+    const pages = doc.getPages();
+    let changed = 0;
+    pages.forEach((page, p) => {
+      const spans = [], annotIdx = new Set();
+      for (const c of chosen) {
+        (c.spans.get(p) || []).forEach(s => spans.push(s));
+        (c.annots.get(p) || []).forEach(i => annotIdx.add(i));
+      }
+      if (spans.length && a.pageInfos[p].editable) {
+        const s = cleanString(a.pageInfos[p], spans);
+        const stream = ctx.flateStream(fromLatin1(s));
+        page.node.set(PDFName.of('Contents'), ctx.register(stream));
+        changed++;
+      }
+      if (annotIdx.size) {
+        const arr = page.node.Annots();
+        const keep = arr.asArray().filter((_, i) => !annotIdx.has(i));
+        page.node.set(PDFName.of('Annots'), ctx.obj(keep));
+        changed++;
+      }
+    });
+    const out = await doc.save({ useObjectStreams: false });
+    return { bytes: out, changedPages: changed };
+  }
+
+  async function inspect(bytes) {
+    const doc = await load(bytes);
+    const a = analyze(doc);
+    a.searchText = phrase => searchText(a, phrase);
+    return a;
+  }
+
+  return { inspect, clean, _tokenize: tokenize };
+});
+
+</script>
+<script>
+(function () {
+  const SAMPLE = "JVBERi0xLjQKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgKG9wZW5zb3VyY2UpCjEgMCBvYmoKPDwKL0YxIDIgMCBSIC9GMiAzIDAgUgo+PgplbmRvYmoKMiAwIG9iago8PAovQmFzZUZvbnQgL0hlbHZldGljYSAvRW5jb2RpbmcgL1dpbkFuc2lFbmNvZGluZyAvTmFtZSAvRjEgL1N1YnR5cGUgL1R5cGUxIC9UeXBlIC9Gb250Cj4+CmVuZG9iagozIDAgb2JqCjw8Ci9CYXNlRm9udCAvSGVsdmV0aWNhLUJvbGQgL0VuY29kaW5nIC9XaW5BbnNpRW5jb2RpbmcgL05hbWUgL0YyIC9TdWJ0eXBlIC9UeXBlMSAvVHlwZSAvRm9udAo+PgplbmRvYmoKNCAwIG9iago8PAovQ29udGVudHMgMTAgMCBSIC9NZWRpYUJveCBbIDAgMCA2MTIgNzkyIF0gL1BhcmVudCA5IDAgUiAvUmVzb3VyY2VzIDw8Ci9FeHRHU3RhdGUgPDwKL2dSTHMwIDw8Ci9jYSAuMjUKPj4KPj4gL0ZvbnQgMSAwIFIgL1Byb2NTZXQgWyAvUERGIC9UZXh0IC9JbWFnZUIgL0ltYWdlQyAvSW1hZ2VJIF0KPj4gL1JvdGF0ZSAwIC9UcmFucyA8PAoKPj4gCiAgL1R5cGUgL1BhZ2UKPj4KZW5kb2JqCjUgMCBvYmoKPDwKL0NvbnRlbnRzIDExIDAgUiAvTWVkaWFCb3ggWyAwIDAgNjEyIDc5MiBdIC9QYXJlbnQgOSAwIFIgL1Jlc291cmNlcyA8PAovRXh0R1N0YXRlIDw8Ci9nUkxzMCA8PAovY2EgLjI1Cj4+Cj4+IC9Gb250IDEgMCBSIC9Qcm9jU2V0IFsgL1BERiAvVGV4dCAvSW1hZ2VCIC9JbWFnZUMgL0ltYWdlSSBdCj4+IC9Sb3RhdGUgMCAvVHJhbnMgPDwKCj4+IAogIC9UeXBlIC9QYWdlCj4+CmVuZG9iago2IDAgb2JqCjw8Ci9Db250ZW50cyAxMiAwIFIgL01lZGlhQm94IFsgMCAwIDYxMiA3OTIgXSAvUGFyZW50IDkgMCBSIC9SZXNvdXJjZXMgPDwKL0V4dEdTdGF0ZSA8PAovZ1JMczAgPDwKL2NhIC4yNQo+Pgo+PiAvRm9udCAxIDAgUiAvUHJvY1NldCBbIC9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUkgXQo+PiAvUm90YXRlIDAgL1RyYW5zIDw8Cgo+PiAKICAvVHlwZSAvUGFnZQo+PgplbmRvYmoKNyAwIG9iago8PAovUGFnZU1vZGUgL1VzZU5vbmUgL1BhZ2VzIDkgMCBSIC9UeXBlIC9DYXRhbG9nCj4+CmVuZG9iago4IDAgb2JqCjw8Ci9BdXRob3IgKGFub255bW91cykgL0NyZWF0aW9uRGF0ZSAoRDoyMDI2MTAyNjEzNDcxMi0wNScwMCcpIC9DcmVhdG9yIChhbm9ueW1vdXMpIC9LZXl3b3JkcyAoKSAvTW9kRGF0ZSAoRDoyMDI2MTAyNjEzNDcxMi0wNScwMCcpIC9Qcm9kdWNlciAoUmVwb3J0TGFiIFBERiBMaWJyYXJ5IC0gXChvcGVuc291cmNlXCkpIAogIC9TdWJqZWN0ICh1bnNwZWNpZmllZCkgL1RpdGxlICh1bnRpdGxlZCkgL1RyYXBwZWQgL0ZhbHNlCj4+CmVuZG9iago5IDAgb2JqCjw8Ci9Db3VudCAzIC9LaWRzIFsgNCAwIFIgNSAwIFIgNiAwIFIgXSAvVHlwZSAvUGFnZXMKPj4KZW5kb2JqCjEwIDAgb2JqCjw8Ci9GaWx0ZXIgWyAvQVNDSUk4NURlY29kZSAvRmxhdGVEZWNvZGUgXSAvTGVuZ3RoIDQ1Mgo+PgpzdHJlYW0KR2F1MS0/Iy47MidTYylSLydkNjcwXWpXcGRVKT8vNW5MTHNyXWtJK2g1S1hVLmNTM01RO2pjZmdJIlVBTFtyKTAla2cnTzQ8LDNBV3N1anNMJSxpWCJrXCNhYD4kcmI5UGJMLSFqTUhqJFk5KlBOV1suU0UscjAlXDY2RTNbZDFjQTxXQ0hxIVQmRywiRkc9b0tgSSY0UCk0WlNca0Y1V0ArUG1zXTtrMSZmLFVIKUliNDM1cjQ6XjptcDVVMEpAXU9qcj5NXDlmNlJzLWR0RlhhT1IoUzJtUScxJ2E7N2hSXVNMcixgRSs4UydidCo+YU5walxSL0NcQ0lVNEE5TDVLbzRoaCRgaFBNX09cWUVFOFI7dXEiZjBORWFIOVNTXDBfUSQ6ZU9mSD0hODwvaDRgKENRJ1dFUUNvNXIpSCJQb00mSm9pVS9xUkIiPmMmIUVvXC87a2NWTz5MKlwqXjFfT11NdTtOcGxmWCZFUDdsaCVealgiU2twTVEiOz8hNzZEJkUrQiIxLUVpLTZANmxcWFtAQT8hSE5FWlJDV2c5QGtaT0MkbDhHcWtqUTlicW5xNTxqTFNmKm5yLCdrajpzfj5lbmRzdHJlYW0KZW5kb2JqCjExIDAgb2JqCjw8Ci9GaWx0ZXIgWyAvQVNDSUk4NURlY29kZSAvRmxhdGVEZWNvZGUgXSAvTGVuZ3RoIDQ1Mgo+PgpzdHJlYW0KR2F1MS0/Iy47MidTYylSLydkNjcwXWpXcGRVKT8vNW5MTHNyXWtJK2g1S1hVLmNTM01RO2pjZmdJIlVBTFtyKTAla2cnTzQ8LDNBV3N1anNMJSxpWCJrXCNhYD4kcmI5UGJMLSFqTUhqJFk5KlBOV1suU0UscjAlXDY2RTNbZDFjQTxXQ0hxSltibVwkMjNjaSQzOnRHLFNVMzBGST5EOF5vZVxvRz8qOCxYdVNjMXIzIzlJcGlYMVJobi8xQCEtUW9dcV9fP1JZNFdqOVY/cCZLK2tPJ0RnaUwyLE9ZPFsuR25LazhNUV1HLy5rODlbT2U1U0IxJjk/ZnI0R15QJTJJYkdeQkc/Wi1iZ3JCP1I8Si5XPDItV0AmYUZvUWpiMz5LaU9OVCw/OU0hT1c1VEdNM1QsLTttZmBoSzRMdSMubGcudGxFUzJsMTAnR08rIWFjQj1WYVQ3K0RKLkI0RkJJKEdjPkclbkwqNCtqKkVgWyosOysiNGVZKC0jVVxzTEtnK2w2Yl0mM2lfIXNWSmYrWjdgYUFSZCZqPy5mOFpzZE8+K01HU05vM3NiLVJPbWdsSVhedS9ZOExrOCpha1whfj5lbmRzdHJlYW0KZW5kb2JqCjEyIDAgb2JqCjw8Ci9GaWx0ZXIgWyAvQVNDSUk4NURlY29kZSAvRmxhdGVEZWNvZGUgXSAvTGVuZ3RoIDQ1Mgo+PgpzdHJlYW0KR2F1MS0/Iy47MidTYylSLydkNjcwXWpXcGRVKT8vNW5MTHNyXWtJK2g1S1hVLmNTM01RO2pjZmdJIlVBTFtyKTAla2cnTzQ8LDNBV3N1anNMJSxpWCJrXCNhYD4kcmI5UGJMLSFqTUhqJFk5KlBOV1suU0UscjAlXDY2RTNbZDFjQTxXQ0hxSlwyMGAkMjNjaSQzOnRHLFNVMzBGST5EOF5vZVxvRz8qOCxYdVNjMXIzIzlJcGlYMVJobi8xQCEtUW9dcV9fP1JZNFdqOVY/cCZLK2tPJ0RnaUwyLE9ZPFsuR25LazhNUV1HLy5rODlbT2U1U0IxJjk/ZnI0R15QJTJJYkdeQkc/Wi1iZ3JCP1I8Si5XPDItV0AmYUZvUWpiMz5LaU9OVCw/OU0hT1c1VEdNM1QsLTttZmBoSzRMdSMubGcudGxFUzJsMTAnR08rIWFjQj1WYVQ3K0RKLkI0RkJJKEdjPkclbkwqNCtqKkVgWyosOysiNGVZKC0jVVxzTEtnK2w2Yl0mM2lfIXNWSmYrWjdgYUFSZCZqPy5mOFpzZE8+K01HU05vM3NiLVJPbWdsSVhedS9ZOExrOC1XbSgkfj5lbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCAxMwowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwNjEgMDAwMDAgbiAKMDAwMDAwMDEwMiAwMDAwMCBuIAowMDAwMDAwMjA5IDAwMDAwIG4gCjAwMDAwMDAzMjEgMDAwMDAgbiAKMDAwMDAwMDU1MyAwMDAwMCBuIAowMDAwMDAwNzg1IDAwMDAwIG4gCjAwMDAwMDEwMTcgMDAwMDAgbiAKMDAwMDAwMTA4NSAwMDAwMCBuIAowMDAwMDAxMzQ2IDAwMDAwIG4gCjAwMDAwMDE0MTcgMDAwMDAgbiAKMDAwMDAwMTk2MCAwMDAwMCBuIAowMDAwMDAyNTAzIDAwMDAwIG4gCnRyYWlsZXIKPDwKL0lEIApbPDAwOGE3NTQxNTdhYTM3ODIwOWI1M2VmZWVmNDc4MzQ2PjwwMDhhNzU0MTU3YWEzNzgyMDliNTNlZmVlZjQ3ODM0Nj5dCiUgUmVwb3J0TGFiIGdlbmVyYXRlZCBQREYgZG9jdW1lbnQgLS0gZGlnZXN0IChvcGVuc291cmNlKQoKL0luZm8gOCAwIFIKL1Jvb3QgNyAwIFIKL1NpemUgMTMKPj4Kc3RhcnR4cmVmCjMwNDYKJSVFT0YK";
+  const E = WMEngine(PDFLib);
+  if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  const $ = id => document.getElementById(id);
+  const st = { bytes: null, name: '', isSample: false, analysis: null, cands: [], searches: [], checked: new Set(), page: 0, origDoc: null, cleanBytes: null, cleanDoc: null, gen: 0 };
+
+  function status(text, kind) { const s = $('status'); if (!text) { s.hidden = true; return; } s.hidden = false; s.className = 'msg' + (kind ? ' ' + kind : ''); s.textContent = text; }
+  function pagesLabel(set, N) {
+    const a = [...set].sort((x, y) => x - y).map(x => x + 1);
+    if (a.length === N && N > 1) return 'all ' + N + ' pages';
+    const parts = []; let i = 0;
+    while (i < a.length) { let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++; parts.push(j > i ? a[i] + '–' + a[j] : String(a[i])); i = j + 1; }
+    const s = parts.join(', ');
+    return (a.length === 1 ? 'page ' : 'pages ') + (s.length > 28 ? s.slice(0, 26) + '…' : s);
+  }
+  function fmtSize(n) { return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+
+  function renderList() {
+    const N = st.analysis.N;
+    const likely = $('likely'), more = $('more');
+    likely.textContent = ''; more.textContent = '';
+    const all = [...st.searches, ...st.cands];
+    const mk = c => {
+      const lab = document.createElement('label');
+      lab.className = 'item';
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'c_' + c.id.replace(/[^a-z0-9]/gi, '_'); cb.checked = st.checked.has(c.id);
+      cb.addEventListener('change', () => { cb.checked ? st.checked.add(c.id) : st.checked.delete(c.id); rebuild(); });
+      const t = document.createElement('span'); t.className = 't'; t.textContent = c.title;
+      const d = document.createElement('span'); d.className = 'd';
+      const pg = document.createElement('span'); pg.className = 'pg'; pg.textContent = pagesLabel(c.pages, N);
+      const dt = document.createElement('span'); dt.textContent = c.detail;
+      d.append(pg, dt);
+      lab.append(cb, t, d);
+      lab.addEventListener('click', e => { if (e.target !== cb) return; const first = Math.min(...c.pages); if (!c.pages.has(st.page)) { st.page = first; showPage(); } });
+      return lab;
+    };
+    const lk = all.filter(c => c.likely), ot = all.filter(c => !c.likely);
+    if (lk.length) lk.forEach(c => likely.append(mk(c)));
+    else {
+      const e = document.createElement('div'); e.className = 'empty';
+      e.textContent = ot.length ? 'Nothing here looks clearly like a watermark. Check the repeating content below, or search for the watermark text.' : 'No watermark-like content found. Try searching for the watermark text.';
+      likely.append(e);
+    }
+    $('moreBox').hidden = !ot.length;
+    $('moreSum').textContent = `Other repeating content (${ot.length})`;
+    ot.slice(0, 60).forEach(c => more.append(mk(c)));
+  }
+
+  async function openBytes(bytes, name, isSample) {
+    status('');
+    $('save').disabled = true;
+    let analysis;
+    try { analysis = await E.inspect(bytes); }
+    catch (e) {
+      status(e.code === 'encrypted' ? 'This PDF is password-protected or encrypted. Remove the protection first (for example by printing it to a new PDF), then open it here.' : 'This file could not be read as a PDF. It may be damaged or not a PDF.', 'err');
+      return;
+    }
+    st.bytes = bytes; st.name = name; st.isSample = isSample; st.analysis = analysis;
+    st.cands = analysis.candidates; st.searches = []; st.page = 0;
+    st.checked = new Set(st.cands.filter(c => c.likely).map(c => c.id));
+    const fb = $('filebar'); fb.textContent = '';
+    const b = document.createElement('b'); b.textContent = name;
+    const pages = document.createElement('span'); pages.className = 'pill'; pages.textContent = analysis.N + (analysis.N === 1 ? ' page' : ' pages');
+    const size = document.createElement('span'); size.className = 'pill'; size.textContent = fmtSize(bytes.length);
+    fb.append(b, pages, size);
+    if (isSample) { const ex = document.createElement('span'); ex.className = 'pill example'; ex.textContent = 'Example file'; fb.append(ex); const h = document.createElement('span'); h.textContent = 'Open your own PDF or drop it anywhere on this page.'; fb.append(h); }
+    if (analysis.unreadable) status(`${analysis.unreadable} page(s) use a format this tool can't edit and will be left unchanged.`);
+    renderList();
+    try { st.origDoc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise; } catch (e) { st.origDoc = null; }
+    await rebuild();
+  }
+
+  let timer = null;
+  function rebuild() {
+    clearTimeout(timer);
+    return new Promise(res => { timer = setTimeout(async () => { await doRebuild(); res(); }, 120); });
+  }
+  async function doRebuild() {
+    const gen = ++st.gen;
+    $('save').disabled = true;
+    try {
+      const phrases = st.searches.map(s => s.phrase);
+      const out = await E.clean(st.bytes, [...st.checked], phrases);
+      if (gen !== st.gen) return;
+      st.cleanBytes = out.bytes;
+      st.cleanDoc = await pdfjsLib.getDocument({ data: out.bytes.slice() }).promise;
+      if (gen !== st.gen) return;
+      $('save').disabled = st.checked.size === 0;
+    } catch (e) {
+      status('Could not build the cleaned copy: ' + (e.message || e), 'err');
+    }
+    showPage();
+  }
+
+  async function renderTo(doc, p, canvas) {
+    const page = await doc.getPage(p + 1);
+    const box = canvas.parentElement.clientWidth - 20;
+    const v1 = page.getViewport({ scale: 1 });
+    const scale = Math.min(2.2, Math.max(0.5, box / v1.width)) * Math.min(2, window.devicePixelRatio || 1);
+    const vp = page.getViewport({ scale });
+    canvas.width = Math.round(vp.width); canvas.height = Math.round(vp.height);
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    return ctx;
+  }
+  let showing = 0;
+  async function showPage() {
+    if (!st.analysis) return;
+    const N = st.analysis.N;
+    st.page = Math.max(0, Math.min(N - 1, st.page));
+    $('pageNum').textContent = `Page ${st.page + 1} of ${N}`;
+    $('prev').disabled = st.page === 0; $('next').disabled = st.page >= N - 1;
+    const my = ++showing;
+    $('busyB').hidden = $('busyA').hidden = false;
+    try {
+      const a = st.origDoc && await renderTo(st.origDoc, st.page, $('cvBefore'));
+      const b = st.cleanDoc && await renderTo(st.cleanDoc, st.page, $('cvAfter'));
+      if (my !== showing) return;
+      if (a && b && $('cvBefore').width === $('cvAfter').width && $('cvBefore').height === $('cvAfter').height) markDiff(a, b);
+    } catch (e) { /* page render failures leave the canvas as-is */ }
+    if (my === showing) $('busyB').hidden = $('busyA').hidden = true;
+  }
+  function markDiff(a, b) {
+    const w = a.canvas.width, h = a.canvas.height;
+    const A = a.getImageData(0, 0, w, h), B = b.getImageData(0, 0, w, h);
+    const mk = getComputedStyle(document.documentElement).getPropertyValue('--mark').trim() || '#d1257a';
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(mk) || [0, 'd1', '25', '7a'];
+    const R = parseInt(m[1], 16), G = parseInt(m[2], 16), Bl = parseInt(m[3], 16);
+    const d = A.data, e = B.data;
+    for (let i = 0; i < d.length; i += 4) {
+      const diff = Math.abs(d[i] - e[i]) + Math.abs(d[i + 1] - e[i + 1]) + Math.abs(d[i + 2] - e[i + 2]);
+      if (diff > 30) { d[i] = (d[i] * 0.35 + R * 0.65) | 0; d[i + 1] = (d[i + 1] * 0.35 + G * 0.65) | 0; d[i + 2] = (d[i + 2] * 0.35 + Bl * 0.65) | 0; }
+    }
+    a.putImageData(A, 0, 0);
+  }
+
+  $('prev').onclick = () => { st.page--; showPage(); };
+  $('next').onclick = () => { st.page++; showPage(); };
+  $('file').addEventListener('change', async e => {
+    const f = e.target.files[0]; if (!f) return;
+    openBytes(new Uint8Array(await f.arrayBuffer()), f.name, false);
+    e.target.value = '';
+  });
+  let dragDepth = 0;
+  addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; $('drop').hidden = false; });
+  addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop').hidden = true; } });
+  addEventListener('dragover', e => e.preventDefault());
+  addEventListener('drop', async e => {
+    e.preventDefault(); dragDepth = 0; $('drop').hidden = true;
+    const f = [...(e.dataTransfer.files || [])].find(x => /pdf$/i.test(x.name) || x.type === 'application/pdf');
+    if (f) openBytes(new Uint8Array(await f.arrayBuffer()), f.name, false);
+    else status('That file is not a PDF.', 'err');
+  });
+
+  $('searchForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const q = $('phrase').value.trim();
+    if (!q || !st.analysis) return;
+    const c = st.analysis.searchText(q);
+    if (!c || c.empty) { status(`No text matching "${q}" was found. Some PDFs store text in a way this can't read; check the repeating content list instead.`); return; }
+    status('');
+    c.phrase = q;
+    st.searches = st.searches.filter(s => s.id !== c.id); st.searches.unshift(c);
+    st.checked.add(c.id);
+    $('phrase').value = '';
+    renderList();
+    if (!c.pages.has(st.page)) st.page = Math.min(...c.pages);
+    rebuild();
+  });
+
+  $('save').addEventListener('click', () => {
+    if (!st.cleanBytes) return;
+    const filename = st.name.replace(/\.pdf$/i, '') + ' (clean).pdf';
+    const url = URL.createObjectURL(new Blob([st.cleanBytes], { type: 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    status('Saved ' + filename, 'ok');
+  });
+
+  let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(showPage, 200); });
+
+  const bin = atob(SAMPLE), u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  openBytes(u8, 'quarterly-report.pdf', true);
+})();
+</script>
+
+</body>
+</html>
