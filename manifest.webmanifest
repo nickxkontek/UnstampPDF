@@ -1,7 +1,7 @@
 {
   "id": "./",
   "name": "Unstamp PDF",
-  "short_name": "Unstamp",
+  "short_name": "Unstamp PDF",
   "description": "Find watermarks in a PDF, preview the removal, and save a clean copy. Files never leave your computer.",
   "start_url": "./",
   "scope": "./",
