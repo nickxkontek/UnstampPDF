@@ -5,6 +5,10 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="description" content="Find and remove watermarks from PDFs. Files stay in your browser.">
 <title>Unstamp PDF</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2346c9">
+<link rel="icon" type="image/png" href="icons/favicon-48.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -105,7 +109,7 @@ figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-s
   <header>
     <div class="brand">
       <h1>Un<span class="strike">stamp</span> PDF</h1>
-      <span class="tag">Finds watermarks in a PDF and saves a clean copy. Files stay in your browser.</span>
+      <span class="tag">Finds watermarks in a PDF and saves a clean copy. Files never leave your computer.</span>
     </div>
     <div class="actions">
       <label class="btn" for="file">Open a PDF<input type="file" id="file" accept="application/pdf,.pdf"></label>
@@ -149,7 +153,7 @@ figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-s
         <figure><figcaption>Before</figcaption><div class="paper"><canvas id="cvBefore" width="10" height="10"></canvas><div class="busy" id="busyB" hidden>Rendering…</div></div></figure>
         <figure><figcaption>After</figcaption><div class="paper"><canvas id="cvAfter" width="10" height="10"></canvas><div class="busy" id="busyA" hidden>Rendering…</div></div></figure>
       </div>
-      <p class="note">Works on watermarks stored as separate text, images, stamps or watermark layers. If the watermark is baked into a scanned page image, it is part of the picture and can't be lifted out this way. Password-protected PDFs need the password removed first.</p>
+      <p class="note">Works on watermarks stored as separate text, images, stamps or watermark layers. If the watermark is baked into a scanned page image, it is part of the picture and can't be lifted out this way. Password-protected PDFs need the password removed first. <a href="privacy.html" style="color:var(--accent)">Privacy</a></p>
     </section>
   </div>
 </div>
@@ -770,11 +774,13 @@ figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-s
     ot.slice(0, 60).forEach(c => more.append(mk(c)));
   }
 
+  let openSeq = 0;
   async function openBytes(bytes, name, isSample) {
+    const mine = ++openSeq;
     status('');
     $('save').disabled = true;
     let analysis;
-    try { analysis = await E.inspect(bytes); }
+    try { analysis = await E.inspect(bytes); if (mine !== openSeq) return; }
     catch (e) {
       status(e.code === 'encrypted' ? 'This PDF is password-protected or encrypted. Remove the protection first (for example by printing it to a new PDF), then open it here.' : 'This file could not be read as a PDF. It may be damaged or not a PDF.', 'err');
       return;
@@ -893,22 +899,49 @@ figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-s
     rebuild();
   });
 
-  $('save').addEventListener('click', () => {
+  $('save').addEventListener('click', async () => {
     if (!st.cleanBytes) return;
     const filename = st.name.replace(/\.pdf$/i, '') + ' (clean).pdf';
-    const url = URL.createObjectURL(new Blob([st.cleanBytes], { type: 'application/pdf' }));
+    const blob = new Blob([st.cleanBytes], { type: 'application/pdf' });
+    if (window.showSaveFilePicker) {
+      try {
+        const handle = await showSaveFilePicker({ suggestedName: filename, types: [{ description: 'PDF document', accept: { 'application/pdf': ['.pdf'] } }] });
+        const w = await handle.createWritable();
+        await w.write(blob); await w.close();
+        status('Saved ' + handle.name, 'ok');
+        return;
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+      }
+    }
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url; a.download = filename;
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-    status('Saved ' + filename, 'ok');
+    status('Saved ' + filename + ' to your Downloads folder', 'ok');
   });
+
+  // PDFs opened from File Explorer ("Open with > Unstamp PDF")
+  let launched = false;
+  if ('launchQueue' in window) {
+    launchQueue.setConsumer(async params => {
+      if (!params.files || !params.files.length) return;
+      launched = true;
+      const f = await params.files[0].getFile();
+      openBytes(new Uint8Array(await f.arrayBuffer()), f.name, false);
+    });
+  }
+
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
 
   let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(showPage, 200); });
 
   const bin = atob(SAMPLE), u8 = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-  openBytes(u8, 'quarterly-report.pdf', true);
+  setTimeout(() => { if (!launched && !st.bytes) openBytes(u8, 'quarterly-report.pdf', true); }, 0);
 })();
 </script>
 
