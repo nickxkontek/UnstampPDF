@@ -60,8 +60,34 @@ button.primary:hover { filter: brightness(1.08); }
 button:disabled { opacity: 0.5; cursor: not-allowed; }
 button:focus-visible, .btn:focus-within, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .btn input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-.filebar { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding-block: 10px; }
-.filebar b { color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
+.queue { display: grid; gap: 10px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding-block: 12px; }
+.qhead { display: flex; align-items: baseline; justify-content: space-between; gap: 6px 16px; flex-wrap: wrap; }
+.qleft { display: flex; align-items: baseline; gap: 6px 14px; flex-wrap: wrap; min-width: 0; }
+.qhead .label { margin: 0; }
+.qsum { font-size: 13.5px; color: var(--muted); }
+.linkbtn { background: none; border: 0; padding: 4px 0; color: var(--accent); font: 500 13.5px var(--body); cursor: pointer; }
+.linkbtn:hover { text-decoration: underline; }
+.qlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 8px; max-height: 236px; overflow-y: auto; padding: 2px; }
+.qrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch; background: var(--sheet); border: 1px solid var(--line); border-radius: 9px; }
+.qrow[aria-current="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+button.qpick { display: grid; gap: 5px; text-align: left; min-width: 0; width: 100%; padding: 9px 12px; border: 0; border-radius: 9px 0 0 9px; background: none; font: inherit; }
+button.qpick:disabled { opacity: 1; cursor: default; }
+.qname { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.qmeta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; font-size: 12.5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.qst { font: 500 12px/1 var(--body); padding: 4px 7px; border-radius: 99px; background: var(--well); color: var(--muted); }
+.qst.todo { background: var(--mark-soft); color: var(--mark); }
+.qst.saved { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
+.qst.err { background: color-mix(in srgb, var(--warn) 15%, transparent); color: var(--warn); }
+button.qx { border: 0; background: none; border-radius: 0 9px 9px 0; padding: 0 12px; font-size: 19px; color: var(--muted); }
+button.qx:hover { color: var(--ink); background: var(--well); }
+.progress { height: 6px; background: var(--well); border-radius: 99px; overflow: hidden; }
+#bar { height: 100%; width: 0; background: var(--accent); }
+@media (prefers-reduced-motion: no-preference) { #bar { transition: width .25s; } }
+.btn.off { opacity: 0.5; pointer-events: none; }
+.sync { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; align-items: start; font-size: 14px; font-weight: 500; padding: 10px 12px; background: var(--well); border-radius: 9px; cursor: pointer; }
+.sync input { margin: 3px 0 0; width: 16px; height: 16px; accent-color: var(--accent); }
+.sync small { display: block; font-weight: 400; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.item .d .also { color: var(--accent); }
 .pill { font: 500 12px/1 var(--mono); padding: 5px 8px; border-radius: 99px; background: var(--well); color: var(--muted); letter-spacing: 0.02em; }
 .pill.example { background: var(--mark-soft); color: var(--mark); }
 .main { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 22px; align-items: start; }
@@ -109,20 +135,29 @@ figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-s
   <header>
     <div class="brand">
       <h1>Un<span class="strike">stamp</span> PDF</h1>
-      <span class="tag">Finds watermarks in a PDF and saves a clean copy. Files never leave your computer.</span>
+      <span class="tag">Removes watermarks from one PDF or a whole batch. Files never leave your computer.</span>
     </div>
     <div class="actions">
-      <label class="btn" for="file">Open a PDF<input type="file" id="file" accept="application/pdf,.pdf"></label>
+      <label class="btn" for="file" id="addBtn">Add PDFs<input type="file" id="file" accept="application/pdf,.pdf" multiple></label>
+      <button id="saveOne" hidden>Save this file</button>
       <button class="primary" id="save" disabled>Save cleaned PDF</button>
     </div>
   </header>
 
-  <div class="filebar" id="filebar"><span>Loading…</span></div>
+  <section class="queue" aria-label="Files">
+    <div class="qhead">
+      <div class="qleft"><p class="label">Files</p><span class="qsum" id="qsum">Loading…</span></div>
+      <button type="button" class="linkbtn" id="clearAll" hidden>Clear list</button>
+    </div>
+    <div class="qlist" id="qlist" role="list"></div>
+    <div class="progress" id="progress" hidden><div id="bar"></div></div>
+  </section>
 
   <div class="main">
     <aside class="rail">
+      <label class="sync" id="syncRow" for="sync" hidden><input type="checkbox" id="sync" checked><span>Apply my changes to every file<small>Ticking or unticking an item, or searching for text, does the same in the other files.</small></span></label>
       <section>
-        <p class="label">Likely watermarks</p>
+        <p class="label" id="likelyLabel">Likely watermarks</p>
         <div class="list" id="likely"></div>
       </section>
       <details id="moreBox" hidden>
@@ -157,7 +192,7 @@ figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-s
     </section>
   </div>
 </div>
-<div class="drop" id="drop" hidden>Drop the PDF to open it</div>
+<div class="drop" id="drop" hidden>Drop PDFs to add them</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
@@ -730,8 +765,15 @@ figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-s
   const E = WMEngine(PDFLib);
   if (window.pdfjsLib) pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   const $ = id => document.getElementById(id);
-  const st = { bytes: null, name: '', isSample: false, analysis: null, cands: [], searches: [], checked: new Set(), page: 0, origDoc: null, cleanBytes: null, cleanDoc: null, gen: 0 };
 
+  /* ---------- state ---------- */
+  const files = [];            // { id, name, bytes, isSample, state: 'checking'|'ready'|'error', error, analysis, cands, searches, checked, saved }
+  const phrases = [];          // text searches applied to every file
+  const overrides = new Map(); // matchKey -> on/off, so files added later follow earlier choices
+  let cur = null, nextId = 1, busy = false, launched = false;
+  const view = { page: 0, origDoc: null, cleanDoc: null, gen: 0, sel: 0 };
+
+  /* ---------- small helpers ---------- */
   function status(text, kind) { const s = $('status'); if (!text) { s.hidden = true; return; } s.hidden = false; s.className = 'msg' + (kind ? ' ' + kind : ''); s.textContent = text; }
   function pagesLabel(set, N) {
     const a = [...set].sort((x, y) => x - y).map(x => x + 1);
@@ -742,26 +784,164 @@ figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-s
     return (a.length === 1 ? 'page ' : 'pages ') + (s.length > 28 ? s.slice(0, 26) + '…' : s);
   }
   function fmtSize(n) { return n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+  const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'));
+  const ready = () => files.filter(f => f.state === 'ready');
+  const allCands = f => [...f.searches, ...f.cands];
+  const tick = () => new Promise(r => setTimeout(r));
+  const cleanName = name => name.replace(/\.pdf$/i, '') + ' (clean).pdf';
 
+  // Items in different files count as "the same" when they have the same text, image size or watermark tag.
+  function matchKey(c) {
+    if (c.kind === 'annot' || c.kind === 'mc') return c.kind;
+    if (c.kind === 'search') return 'search:' + c.phrase.toLowerCase();
+    if (c.kind === 'text') return c.label ? 'text:' + c.label.toLowerCase() : null;
+    if (c.kind === 'xo') return c.label ? 'xo:' + c.label.toLowerCase() : (/^Image/.test(c.title) ? 'xo:' + c.title : null);
+    return null;
+  }
+  const syncOn = () => $('sync').checked;
+
+  /* ---------- adding and checking files ---------- */
+  async function addFiles(items) {
+    if (!items.length) return;
+    for (let i = files.length - 1; i >= 0; i--) if (files[i].isSample) files.splice(i, 1);
+    if (cur && cur.isSample) cur = null;
+    const added = items.map(it => ({ id: nextId++, name: it.name, bytes: it.bytes, isSample: !!it.isSample, state: 'checking', checked: new Set(), searches: [], cands: [], saved: false }));
+    files.push(...added);
+    renderQueue(); updateButtons();
+    for (const f of added) {
+      await analyzeFile(f);
+      if (!files.includes(f)) continue; // removed while checking
+      renderQueue();
+      if (!cur && f.state === 'ready') select(f);
+      else if (cur) renderList();
+      updateButtons();
+    }
+    if (!cur && !ready().length) showEmpty();
+  }
+
+  async function analyzeFile(f) {
+    await tick();
+    try {
+      const a = await E.inspect(f.bytes);
+      f.analysis = a; f.cands = a.candidates; f.state = 'ready';
+      f.checked = new Set(a.candidates.filter(c => c.likely).map(c => c.id));
+      for (const ph of phrases) addSearch(f, ph);
+      for (const c of allCands(f)) {
+        const k = matchKey(c);
+        if (k && overrides.has(k)) overrides.get(k) ? f.checked.add(c.id) : f.checked.delete(c.id);
+      }
+    } catch (e) {
+      f.state = 'error';
+      f.error = e && e.code === 'encrypted' ? 'Password-protected' : 'Not a readable PDF';
+    }
+  }
+
+  function addSearch(f, phrase) {
+    const c = f.analysis.searchText(phrase);
+    if (!c || c.empty) return false;
+    c.phrase = phrase;
+    f.searches = f.searches.filter(s => s.id !== c.id); f.searches.unshift(c);
+    f.checked.add(c.id);
+    f.saved = false;
+    return true;
+  }
+
+  function removeFile(f) {
+    const i = files.indexOf(f); if (i < 0) return;
+    files.splice(i, 1);
+    if (cur === f) {
+      cur = null;
+      const next = files.slice(i).find(x => x.state === 'ready') || ready()[0];
+      next ? select(next) : showEmpty();
+    }
+    renderQueue(); updateButtons(); renderList();
+  }
+
+  /* ---------- file list ---------- */
+  function renderQueue() {
+    const list = $('qlist'); list.textContent = '';
+    const r = ready(), checking = files.filter(f => f.state === 'checking').length, bad = files.filter(f => f.state === 'error').length;
+    const toClean = r.filter(f => f.checked.size).length;
+    const sample = files.length === 1 && files[0].isSample;
+    let sum;
+    if (!files.length) sum = 'No files yet. Add PDFs or drop them anywhere on this page.';
+    else if (sample) sum = 'Example file. Add your own PDFs to replace it; you can add many at once.';
+    else {
+      sum = plural(files.length, 'file');
+      if (checking) sum += ' · checking ' + checking;
+      sum += ' · ' + toClean + ' ready to clean';
+      if (bad) sum += ' · ' + bad + " can't be opened";
+    }
+    $('qsum').textContent = sum;
+    $('clearAll').hidden = !files.length || sample;
+    for (const f of files) {
+      const row = document.createElement('div');
+      row.className = 'qrow'; row.setAttribute('role', 'listitem');
+      if (f === cur) row.setAttribute('aria-current', 'true');
+      const pick = document.createElement('button');
+      pick.type = 'button'; pick.className = 'qpick'; pick.id = 'pick_' + f.id; pick.title = f.name;
+      pick.disabled = f.state !== 'ready' || busy;
+      pick.addEventListener('click', () => { if (f !== cur) select(f); });
+      const nm = document.createElement('span'); nm.className = 'qname'; nm.textContent = f.name;
+      const meta = document.createElement('span'); meta.className = 'qmeta';
+      const st = document.createElement('span'); st.className = 'qst';
+      if (f.state === 'checking') st.textContent = 'Checking…';
+      else if (f.state === 'error') { st.textContent = f.error; st.classList.add('err'); }
+      else if (f.saveError) { st.textContent = 'Save failed'; st.classList.add('err'); }
+      else if (f.saved) { st.textContent = 'Saved'; st.classList.add('saved'); }
+      else if (f.checked.size) { st.textContent = plural(f.checked.size, 'item') + ' to remove'; st.classList.add('todo'); }
+      else st.textContent = 'Nothing selected';
+      meta.append(st);
+      if (f.analysis) { const p = document.createElement('span'); p.textContent = plural(f.analysis.N, 'page'); meta.append(p); }
+      const sz = document.createElement('span'); sz.textContent = fmtSize(f.bytes.length); meta.append(sz);
+      if (f.isSample) { const ex = document.createElement('span'); ex.className = 'pill example'; ex.textContent = 'Example'; meta.append(ex); }
+      pick.append(nm, meta);
+      const x = document.createElement('button');
+      x.type = 'button'; x.className = 'qx'; x.setAttribute('aria-label', 'Remove ' + f.name); x.textContent = '×';
+      x.disabled = busy;
+      x.addEventListener('click', () => removeFile(f));
+      row.append(pick, x);
+      list.append(row);
+    }
+    const curRow = list.querySelector('[aria-current="true"]');
+    if (curRow && curRow.scrollIntoView) curRow.scrollIntoView({ block: 'nearest' });
+  }
+
+  /* ---------- watermark list for the current file ---------- */
   function renderList() {
-    const N = st.analysis.N;
     const likely = $('likely'), more = $('more');
     likely.textContent = ''; more.textContent = '';
-    const all = [...st.searches, ...st.cands];
+    const multi = ready().length > 1;
+    $('syncRow').hidden = !multi;
+    $('likelyLabel').textContent = multi ? 'Likely watermarks in this file' : 'Likely watermarks';
+    if (!cur) {
+      const e = document.createElement('div'); e.className = 'empty';
+      e.textContent = files.some(f => f.state === 'checking') ? 'Checking your files…' : 'Add PDFs with the button above or drop them anywhere on this page.';
+      likely.append(e); $('moreBox').hidden = true; return;
+    }
+    const N = cur.analysis.N;
+    const others = ready().filter(f => f !== cur);
     const mk = c => {
       const lab = document.createElement('label');
       lab.className = 'item';
-      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'c_' + c.id.replace(/[^a-z0-9]/gi, '_'); cb.checked = st.checked.has(c.id);
-      cb.addEventListener('change', () => { cb.checked ? st.checked.add(c.id) : st.checked.delete(c.id); rebuild(); });
+      const cb = document.createElement('input'); cb.type = 'checkbox'; cb.id = 'c_' + c.id.replace(/[^a-z0-9]/gi, '_'); cb.checked = cur.checked.has(c.id);
+      cb.disabled = busy;
+      cb.addEventListener('change', () => setItem(c, cb.checked));
       const t = document.createElement('span'); t.className = 't'; t.textContent = c.title;
       const d = document.createElement('span'); d.className = 'd';
       const pg = document.createElement('span'); pg.className = 'pg'; pg.textContent = pagesLabel(c.pages, N);
       const dt = document.createElement('span'); dt.textContent = c.detail;
       d.append(pg, dt);
+      const key = matchKey(c);
+      if (key && others.length) {
+        const n = others.filter(f => allCands(f).some(o => matchKey(o) === key)).length;
+        if (n) { const al = document.createElement('span'); al.className = 'also'; al.textContent = 'Also in ' + plural(n, 'other file'); d.append(al); }
+      }
       lab.append(cb, t, d);
-      lab.addEventListener('click', e => { if (e.target !== cb) return; const first = Math.min(...c.pages); if (!c.pages.has(st.page)) { st.page = first; showPage(); } });
+      lab.addEventListener('click', e => { if (e.target !== cb) return; if (!c.pages.has(view.page)) { view.page = Math.min(...c.pages); showPage(); } });
       return lab;
     };
+    const all = allCands(cur);
     const lk = all.filter(c => c.likely), ot = all.filter(c => !c.likely);
     if (lk.length) lk.forEach(c => likely.append(mk(c)));
     else {
@@ -774,30 +954,43 @@ figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-s
     ot.slice(0, 60).forEach(c => more.append(mk(c)));
   }
 
-  let openSeq = 0;
-  async function openBytes(bytes, name, isSample) {
-    const mine = ++openSeq;
-    status('');
-    $('save').disabled = true;
-    let analysis;
-    try { analysis = await E.inspect(bytes); if (mine !== openSeq) return; }
-    catch (e) {
-      status(e.code === 'encrypted' ? 'This PDF is password-protected or encrypted. Remove the protection first (for example by printing it to a new PDF), then open it here.' : 'This file could not be read as a PDF. It may be damaged or not a PDF.', 'err');
-      return;
+  function setItem(c, on) {
+    on ? cur.checked.add(c.id) : cur.checked.delete(c.id);
+    cur.saved = false; cur.saveError = false;
+    const key = matchKey(c);
+    if (syncOn() && key) {
+      overrides.set(key, on);
+      for (const f of ready()) {
+        if (f === cur) continue;
+        for (const o of allCands(f)) if (matchKey(o) === key) { on ? f.checked.add(o.id) : f.checked.delete(o.id); f.saved = false; f.saveError = false; }
+      }
     }
-    st.bytes = bytes; st.name = name; st.isSample = isSample; st.analysis = analysis;
-    st.cands = analysis.candidates; st.searches = []; st.page = 0;
-    st.checked = new Set(st.cands.filter(c => c.likely).map(c => c.id));
-    const fb = $('filebar'); fb.textContent = '';
-    const b = document.createElement('b'); b.textContent = name;
-    const pages = document.createElement('span'); pages.className = 'pill'; pages.textContent = analysis.N + (analysis.N === 1 ? ' page' : ' pages');
-    const size = document.createElement('span'); size.className = 'pill'; size.textContent = fmtSize(bytes.length);
-    fb.append(b, pages, size);
-    if (isSample) { const ex = document.createElement('span'); ex.className = 'pill example'; ex.textContent = 'Example file'; fb.append(ex); const h = document.createElement('span'); h.textContent = 'Open your own PDF or drop it anywhere on this page.'; fb.append(h); }
-    if (analysis.unreadable) status(`${analysis.unreadable} page(s) use a format this tool can't edit and will be left unchanged.`);
-    renderList();
-    try { st.origDoc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise; } catch (e) { st.origDoc = null; }
+    renderQueue(); updateButtons(); rebuild();
+  }
+
+  /* ---------- preview ---------- */
+  async function select(f) {
+    if (!f || f.state !== 'ready') return;
+    cur = f; view.page = 0; status('');
+    renderQueue(); renderList(); updateButtons();
+    if (f.analysis.unreadable) status(`${plural(f.analysis.unreadable, 'page')} in this file use a format this tool can't edit and will be left unchanged.`);
+    const mine = ++view.sel;
+    if (view.origDoc) { try { view.origDoc.destroy(); } catch (e) {} }
+    view.origDoc = null;
+    try {
+      const d = await pdfjsLib.getDocument({ data: f.bytes.slice() }).promise;
+      if (mine !== view.sel) { d.destroy(); return; }
+      view.origDoc = d;
+    } catch (e) { view.origDoc = null; }
     await rebuild();
+  }
+
+  function showEmpty() {
+    cur = null;
+    for (const id of ['cvBefore', 'cvAfter']) { const c = $(id); c.width = 10; c.height = 10; }
+    $('pageNum').textContent = 'Page – of –';
+    $('prev').disabled = $('next').disabled = true;
+    renderList(); updateButtons();
   }
 
   let timer = null;
@@ -806,18 +999,17 @@ figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-s
     return new Promise(res => { timer = setTimeout(async () => { await doRebuild(); res(); }, 120); });
   }
   async function doRebuild() {
-    const gen = ++st.gen;
-    $('save').disabled = true;
+    if (!cur) return;
+    const gen = ++view.gen, f = cur;
     try {
-      const phrases = st.searches.map(s => s.phrase);
-      const out = await E.clean(st.bytes, [...st.checked], phrases);
-      if (gen !== st.gen) return;
-      st.cleanBytes = out.bytes;
-      st.cleanDoc = await pdfjsLib.getDocument({ data: out.bytes.slice() }).promise;
-      if (gen !== st.gen) return;
-      $('save').disabled = st.checked.size === 0;
+      const out = await E.clean(f.bytes, [...f.checked], f.searches.map(s => s.phrase));
+      if (gen !== view.gen || f !== cur) return;
+      const d = await pdfjsLib.getDocument({ data: out.bytes.slice() }).promise;
+      if (gen !== view.gen || f !== cur) { d.destroy(); return; }
+      if (view.cleanDoc) { try { view.cleanDoc.destroy(); } catch (e) {} }
+      view.cleanDoc = d;
     } catch (e) {
-      status('Could not build the cleaned copy: ' + (e.message || e), 'err');
+      if (gen === view.gen) status('Could not build the cleaned copy: ' + (e.message || e), 'err');
     }
     showPage();
   }
@@ -836,16 +1028,16 @@ figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-s
   }
   let showing = 0;
   async function showPage() {
-    if (!st.analysis) return;
-    const N = st.analysis.N;
-    st.page = Math.max(0, Math.min(N - 1, st.page));
-    $('pageNum').textContent = `Page ${st.page + 1} of ${N}`;
-    $('prev').disabled = st.page === 0; $('next').disabled = st.page >= N - 1;
+    if (!cur) return;
+    const N = cur.analysis.N;
+    view.page = Math.max(0, Math.min(N - 1, view.page));
+    $('pageNum').textContent = `Page ${view.page + 1} of ${N}`;
+    $('prev').disabled = view.page === 0; $('next').disabled = view.page >= N - 1;
     const my = ++showing;
     $('busyB').hidden = $('busyA').hidden = false;
     try {
-      const a = st.origDoc && await renderTo(st.origDoc, st.page, $('cvBefore'));
-      const b = st.cleanDoc && await renderTo(st.cleanDoc, st.page, $('cvAfter'));
+      const a = view.origDoc && await renderTo(view.origDoc, view.page, $('cvBefore'));
+      const b = view.cleanDoc && await renderTo(view.cleanDoc, view.page, $('cvAfter'));
       if (my !== showing) return;
       if (a && b && $('cvBefore').width === $('cvAfter').width && $('cvBefore').height === $('cvAfter').height) markDiff(a, b);
     } catch (e) { /* page render failures leave the canvas as-is */ }
@@ -865,71 +1057,224 @@ figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-s
     a.putImageData(A, 0, 0);
   }
 
-  $('prev').onclick = () => { st.page--; showPage(); };
-  $('next').onclick = () => { st.page++; showPage(); };
-  $('file').addEventListener('change', async e => {
-    const f = e.target.files[0]; if (!f) return;
-    openBytes(new Uint8Array(await f.arrayBuffer()), f.name, false);
-    e.target.value = '';
-  });
-  let dragDepth = 0;
-  addEventListener('dragenter', e => { e.preventDefault(); dragDepth++; $('drop').hidden = false; });
-  addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop').hidden = true; } });
-  addEventListener('dragover', e => e.preventDefault());
-  addEventListener('drop', async e => {
-    e.preventDefault(); dragDepth = 0; $('drop').hidden = true;
-    const f = [...(e.dataTransfer.files || [])].find(x => /pdf$/i.test(x.name) || x.type === 'application/pdf');
-    if (f) openBytes(new Uint8Array(await f.arrayBuffer()), f.name, false);
-    else status('That file is not a PDF.', 'err');
-  });
+  /* ---------- buttons ---------- */
+  function updateButtons() {
+    const r = ready(), checking = files.some(f => f.state === 'checking');
+    const toClean = r.filter(f => f.checked.size);
+    const multi = r.length > 1;
+    const save = $('save'), one = $('saveOne');
+    one.hidden = !multi;
+    one.disabled = busy || !cur || !cur.checked.size;
+    if (multi) {
+      save.textContent = checking ? 'Checking files…' : (toClean.length === r.length ? `Save all ${r.length} files` : `Save ${toClean.length} of ${r.length} files`);
+      save.disabled = busy || checking || !toClean.length;
+    } else {
+      save.textContent = 'Save cleaned PDF';
+      save.disabled = busy || !cur || !cur.checked.size;
+    }
+    $('file').disabled = busy;
+    $('addBtn').classList.toggle('off', busy);
+    $('clearAll').disabled = busy;
+  }
+  function setBusy(on) {
+    busy = on;
+    updateButtons(); renderQueue(); renderList();
+    $('phrase').disabled = $('sync').disabled = on;
+  }
+  function progress(done, total) {
+    const p = $('progress');
+    if (done == null) { p.hidden = true; return; }
+    p.hidden = false;
+    $('bar').style.width = Math.round(done / total * 100) + '%';
+  }
 
-  $('searchForm').addEventListener('submit', e => {
-    e.preventDefault();
-    const q = $('phrase').value.trim();
-    if (!q || !st.analysis) return;
-    const c = st.analysis.searchText(q);
-    if (!c || c.empty) { status(`No text matching "${q}" was found. Some PDFs store text in a way this can't read; check the repeating content list instead.`); return; }
-    status('');
-    c.phrase = q;
-    st.searches = st.searches.filter(s => s.id !== c.id); st.searches.unshift(c);
-    st.checked.add(c.id);
-    $('phrase').value = '';
-    renderList();
-    if (!c.pages.has(st.page)) st.page = Math.min(...c.pages);
-    rebuild();
-  });
+  /* ---------- saving ---------- */
+  function download(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  }
 
-  $('save').addEventListener('click', async () => {
-    if (!st.cleanBytes) return;
-    const filename = st.name.replace(/\.pdf$/i, '') + ' (clean).pdf';
-    const blob = new Blob([st.cleanBytes], { type: 'application/pdf' });
+  async function saveOne(f) {
+    if (!f || !f.checked.size) return;
+    let out;
+    try { out = await E.clean(f.bytes, [...f.checked], f.searches.map(s => s.phrase)); }
+    catch (e) { status('Could not build the cleaned copy: ' + (e.message || e), 'err'); return; }
+    const filename = cleanName(f.name);
+    const blob = new Blob([out.bytes], { type: 'application/pdf' });
     if (window.showSaveFilePicker) {
       try {
         const handle = await showSaveFilePicker({ suggestedName: filename, types: [{ description: 'PDF document', accept: { 'application/pdf': ['.pdf'] } }] });
         const w = await handle.createWritable();
         await w.write(blob); await w.close();
+        f.saved = true; f.saveError = false; renderQueue();
         status('Saved ' + handle.name, 'ok');
         return;
       } catch (e) {
         if (e && e.name === 'AbortError') return;
       }
     }
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    download(blob, filename);
+    f.saved = true; f.saveError = false; renderQueue();
     status('Saved ' + filename + ' to your Downloads folder', 'ok');
+  }
+
+  // Finds a name that isn't already in the folder, so nothing gets overwritten.
+  async function freeName(dir, name, taken) {
+    const base = name.replace(/\.pdf$/i, '');
+    for (let n = 1; n < 1000; n++) {
+      const nm = n === 1 ? name : `${base} ${n}.pdf`;
+      if (taken.has(nm.toLowerCase())) continue;
+      try { await dir.getFileHandle(nm); continue; } catch (e) { if (e && e.name !== 'NotFoundError' && e.name !== 'TypeMismatchError') throw e; if (e && e.name === 'TypeMismatchError') continue; }
+      taken.add(nm.toLowerCase());
+      return nm;
+    }
+    throw new Error('No free file name');
+  }
+  function zipName(name, taken) {
+    const base = name.replace(/\.pdf$/i, '');
+    for (let n = 1; ; n++) {
+      const nm = n === 1 ? name : `${base} ${n}.pdf`;
+      if (!taken.has(nm.toLowerCase())) { taken.add(nm.toLowerCase()); return nm; }
+    }
+  }
+
+  async function saveAll() {
+    const r = ready();
+    if (r.length <= 1) return saveOne(cur);
+    const todo = r.filter(f => f.checked.size);
+    if (!todo.length) return;
+    const skipped = r.length - todo.length, bad = files.filter(f => f.state === 'error').length;
+    let dir = null;
+    if (window.showDirectoryPicker) {
+      try { dir = await showDirectoryPicker({ id: 'unstamp-out', mode: 'readwrite', startIn: 'documents' }); }
+      catch (e) { if (e && e.name === 'AbortError') return; dir = null; }
+    }
+    setBusy(true); status('');
+    const taken = new Set(), entries = [];
+    let ok = 0, failed = 0;
+    for (let i = 0; i < todo.length; i++) {
+      const f = todo[i];
+      progress(i, todo.length);
+      status(`Cleaning ${i + 1} of ${todo.length}: ${f.name}`);
+      try {
+        const out = await E.clean(f.bytes, [...f.checked], f.searches.map(s => s.phrase));
+        if (dir) {
+          const nm = await freeName(dir, cleanName(f.name), taken);
+          const h = await dir.getFileHandle(nm, { create: true });
+          const w = await h.createWritable();
+          await w.write(new Blob([out.bytes], { type: 'application/pdf' })); await w.close();
+        } else entries.push({ name: zipName(cleanName(f.name), taken), data: out.bytes });
+        f.saved = true; f.saveError = false; ok++;
+      } catch (e) { f.saveError = true; failed++; }
+      renderQueue();
+      await tick();
+    }
+    progress(todo.length, todo.length);
+    const zipFile = 'Unstamp PDF cleaned files.zip';
+    if (!dir && entries.length) download(makeZip(entries), zipFile);
+    let msg = dir ? `Saved ${plural(ok, 'cleaned file')} to the "${dir.name}" folder.` : `Saved ${plural(ok, 'cleaned file')} in "${zipFile}" in your Downloads folder.`;
+    if (skipped) msg += ` Skipped ${plural(skipped, 'file')} with nothing selected to remove.`;
+    if (bad) msg += ` ${plural(bad, 'file')} couldn't be opened.`;
+    if (failed) msg += ` ${plural(failed, 'file')} failed to save; ${failed === 1 ? 'it is' : 'they are'} marked in the list.`;
+    setBusy(false);
+    setTimeout(() => progress(null), 800);
+    status(msg, failed ? 'err' : 'ok');
+  }
+
+  /* ---------- zip (stored, no compression; PDFs are already compressed) ---------- */
+  const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  function crc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+  function makeZip(entries) {
+    const enc = new TextEncoder(), parts = [], central = [];
+    const now = new Date();
+    const dosTime = (now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1);
+    const dosDate = ((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate();
+    let offset = 0;
+    for (const e of entries) {
+      const name = enc.encode(e.name), crc = crc32(e.data), size = e.data.length;
+      const lh = new DataView(new ArrayBuffer(30));
+      lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(8, 0, true);
+      lh.setUint16(10, dosTime, true); lh.setUint16(12, dosDate, true); lh.setUint32(14, crc, true);
+      lh.setUint32(18, size, true); lh.setUint32(22, size, true); lh.setUint16(26, name.length, true); lh.setUint16(28, 0, true);
+      parts.push(lh, name, e.data);
+      const ch = new DataView(new ArrayBuffer(46));
+      ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(10, 0, true);
+      ch.setUint16(12, dosTime, true); ch.setUint16(14, dosDate, true); ch.setUint32(16, crc, true);
+      ch.setUint32(20, size, true); ch.setUint32(24, size, true); ch.setUint16(28, name.length, true);
+      ch.setUint32(42, offset, true);
+      central.push(ch, name);
+      offset += 30 + name.length + size;
+    }
+    const cdSize = central.reduce((s, p) => s + p.byteLength, 0);
+    const end = new DataView(new ArrayBuffer(22));
+    end.setUint32(0, 0x06054b50, true); end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true);
+    end.setUint32(12, cdSize, true); end.setUint32(16, offset, true);
+    return new Blob([...parts, ...central, end], { type: 'application/zip' });
+  }
+
+  /* ---------- events ---------- */
+  $('prev').onclick = () => { view.page--; showPage(); };
+  $('next').onclick = () => { view.page++; showPage(); };
+  $('save').addEventListener('click', () => { if (!busy) saveAll(); });
+  $('saveOne').addEventListener('click', () => { if (!busy) saveOne(cur); });
+  $('clearAll').addEventListener('click', () => {
+    if (busy) return;
+    files.length = 0; phrases.length = 0; overrides.clear();
+    showEmpty(); renderQueue(); status('');
   });
 
-  // PDFs opened from File Explorer ("Open with > Unstamp PDF")
-  let launched = false;
+  async function takeFiles(list) {
+    const all = [...list];
+    const pdfs = all.filter(x => /\.pdf$/i.test(x.name) || x.type === 'application/pdf');
+    const skipped = all.length - pdfs.length;
+    if (skipped) status(`Skipped ${plural(skipped, 'file')} that ${skipped === 1 ? "isn't a PDF" : "aren't PDFs"}.`);
+    else status('');
+    const items = [];
+    for (const f of pdfs) items.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
+    await addFiles(items);
+  }
+  $('file').addEventListener('change', async e => {
+    const list = [...e.target.files]; e.target.value = '';
+    if (list.length) takeFiles(list);
+  });
+  let dragDepth = 0;
+  addEventListener('dragenter', e => { e.preventDefault(); if (busy) return; dragDepth++; $('drop').hidden = false; });
+  addEventListener('dragleave', () => { if (--dragDepth <= 0) { dragDepth = 0; $('drop').hidden = true; } });
+  addEventListener('dragover', e => e.preventDefault());
+  addEventListener('drop', e => {
+    e.preventDefault(); dragDepth = 0; $('drop').hidden = true;
+    if (busy) return;
+    const list = [...(e.dataTransfer.files || [])];
+    if (list.length) takeFiles(list);
+  });
+
+  $('searchForm').addEventListener('submit', e => {
+    e.preventDefault();
+    const q = $('phrase').value.trim();
+    if (!q || !cur || busy) return;
+    const targets = syncOn() ? ready() : [cur];
+    let hits = 0;
+    for (const f of targets) if (addSearch(f, q)) hits++;
+    if (!hits) { status(`No text matching "${q}" was found. Some PDFs store text in a way this can't read; check the repeating content list instead.`); return; }
+    if (syncOn() && !phrases.some(p => p.toLowerCase() === q.toLowerCase())) phrases.push(q);
+    $('phrase').value = '';
+    status(targets.length > 1 ? `Found "${q}" in ${hits} of ${plural(targets.length, 'file')}.` : '');
+    renderQueue(); renderList(); updateButtons();
+    const c = cur.searches.find(s => s.phrase === q);
+    if (c) { if (!c.pages.has(view.page)) view.page = Math.min(...c.pages); rebuild(); }
+  });
+
+  // PDFs opened from File Explorer ("Open with > Unstamp PDF"), one or many
   if ('launchQueue' in window) {
     launchQueue.setConsumer(async params => {
       if (!params.files || !params.files.length) return;
       launched = true;
-      const f = await params.files[0].getFile();
-      openBytes(new Uint8Array(await f.arrayBuffer()), f.name, false);
+      const list = [];
+      for (const h of params.files) { try { list.push(await h.getFile()); } catch (e) {} }
+      takeFiles(list);
     });
   }
 
@@ -939,9 +1284,10 @@ figcaption { font: 600 11.5px/1 var(--body); text-transform: uppercase; letter-s
 
   let rz; addEventListener('resize', () => { clearTimeout(rz); rz = setTimeout(showPage, 200); });
 
+  renderQueue(); renderList(); updateButtons();
   const bin = atob(SAMPLE), u8 = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
-  setTimeout(() => { if (!launched && !st.bytes) openBytes(u8, 'quarterly-report.pdf', true); }, 0);
+  setTimeout(() => { if (!launched && !files.length) addFiles([{ name: 'quarterly-report.pdf', bytes: u8, isSample: true }]); }, 0);
 })();
 </script>
 

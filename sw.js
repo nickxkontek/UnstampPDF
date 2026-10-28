@@ -1,5 +1,5 @@
 // Unstamp PDF offline support. Change VERSION whenever you upload new files.
-const VERSION = 'unstamp-v2';
+const VERSION = 'unstamp-v3';
 const CORE = [
   './', './index.html', './manifest.webmanifest', './privacy.html',
   './icons/icon-192.png', './icons/icon-512.png', './icons/favicon-48.png',
